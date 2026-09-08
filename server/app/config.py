@@ -1,9 +1,7 @@
 """Single source of truth for every runtime knob.
 
-Nothing else in the codebase reads os.environ. A reviewer checking the
-"no hardcoded credentials" criterion should only have to read this file.
-
-Field declarations are given; loading/validation/derivation is yours to write.
+Nothing else in the codebase reads os.environ, so there is exactly one place
+to check that no credential is hardcoded.
 """
 
 from functools import lru_cache

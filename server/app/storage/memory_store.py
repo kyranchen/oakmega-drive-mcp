@@ -5,9 +5,9 @@ shared between instances. Its job is to let you run and test the whole auth
 chain locally without provisioning any GCP resources — and to prove the
 Protocol abstraction is real rather than decorative.
 
-Implement as a class holding five dicts, one per namespace, with an asyncio
-lock around the pop_* operations to preserve the single-use guarantee.
-TTL expiry can be lazy (check created_at on read) rather than a sweeper.
+Expiry is checked lazily on read rather than by a background sweeper: an
+expired record still sitting in a dict is unreachable, so keeping it costs
+memory but never correctness, and this process discards everything on exit.
 """
 
 
@@ -22,7 +22,7 @@ from .base import GoogleCredentials, PendingAuthorization
 
 
 class MemoryTokenStore:
-    """See storage.base.TokenStore for the contract."""
+    """In-memory implementation of storage.base.TokenStore."""
 
     def __init__(self) -> None:
         self._credentials: dict[str, GoogleCredentials] = {}
