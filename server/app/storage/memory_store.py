@@ -10,7 +10,6 @@ expired record still sitting in a dict is unreachable, so keeping it costs
 memory but never correctness, and this process discards everything on exit.
 """
 
-
 import asyncio
 import datetime
 import time
@@ -52,9 +51,14 @@ class MemoryTokenStore:
             record = self._pending.pop(state, None)
             if record is None:
                 return None
-            if record.created_at + datetime.timedelta(minutes=10) < datetime.datetime.now(tz=datetime.timezone.utc):
+            if record.created_at + datetime.timedelta(
+                minutes=10
+            ) < datetime.datetime.now(tz=datetime.UTC):
                 return None
             return record
+        
+    async def get_code(self, code: str) -> AuthorizationCode | None:
+        return self._codes.get(code)
 
     async def put_code(self, record: AuthorizationCode) -> None:
         self._codes[record.code] = record

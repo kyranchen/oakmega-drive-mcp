@@ -89,6 +89,7 @@ class TokenStore(Protocol):
     async def pop_pending(self, state: str) -> PendingAuthorization | None: ...
 
     # --- Authorization codes we minted (SDK type) ------------------------
+    async def get_code(self, code: str) -> AuthorizationCode | None: ...
     async def put_code(self, record: AuthorizationCode) -> None: ...
     async def pop_code(self, code: str) -> AuthorizationCode | None: ...
 
@@ -110,8 +111,8 @@ def get_token_store() -> TokenStore:
     Cache process-wide — building a Firestore client per request is wasteful
     and leaks connections.
     """
-    from .memory_store import MemoryTokenStore
     from .firestore_store import FirestoreTokenStore
+    from .memory_store import MemoryTokenStore
 
     settings = get_settings()
     if settings.token_store_backend == "memory":

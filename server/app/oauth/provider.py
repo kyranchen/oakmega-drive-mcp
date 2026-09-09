@@ -22,11 +22,18 @@ store only its hash), and load_access_token (hash the presented token, look it
 up, return None rather than raising on any failure).
 """
 
+import hashlib
 import logging
 import secrets
-from datetime import datetime
+import time
+from datetime import UTC, datetime
 
-from mcp.server.auth.provider import OAuthAuthorizationServerProvider
+from mcp.server.auth.provider import (
+    AccessToken,
+    OAuthAuthorizationServerProvider,
+    TokenError,
+)
+from mcp.shared.auth import OAuthToken
 
 from ..storage.base import PendingAuthorization
 from .google_flow import build_google_consent_url
@@ -64,19 +71,51 @@ class GoogleDriveAuthProvider(OAuthAuthorizationServerProvider):
             code_challenge=params.code_challenge,
             scopes=params.scopes or [],
             resource=params.resource,
-            created_at=datetime.datetime.now(datetime.timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await self.store.put_pending(state, pending)
         return build_google_consent_url(state)
 
     async def load_authorization_code(self, client, authorization_code):
-        raise NotImplementedError
+        record = await self.store.get_code(authorization_code)
+        if record is None:
+            return None
+        if record.client_id != client.client_id:
+            return None
+        return record
 
     async def exchange_authorization_code(self, client, authorization_code):
-        raise NotImplementedError
+        record = await self.store.pop_code(authorization_code.code)
+        if record is None:
+            raise TokenError(
+                "invalid_grant", "authorization code has already been used"
+            )
+
+        raw_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        token_object = AccessToken(
+            token=token_hash,
+            client_id=record.client_id,
+            scopes=record.scopes,
+            resource=record.resource,
+            subject=record.subject,
+            expires_at=int(time.time()) + 3600,
+        )
+
+        await self.store.put_access_token(token_hash, token_object)
+
+        return OAuthToken(
+            access_token=raw_token, token_type="Bearer", expires_in=24 * 3600
+        )
 
     async def load_access_token(self, token):
-        raise NotImplementedError
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        record = await self.store.get_access_token(token_hash)
+        if record is None:
+            return None
+        if record.expires_at and record.expires_at < time.time():
+            return None
+        return record
 
     async def load_refresh_token(self, client, refresh_token):
         # `load_*` reports "not found" by returning None; raising here would

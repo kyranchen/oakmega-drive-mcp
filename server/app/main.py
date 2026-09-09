@@ -17,6 +17,7 @@ from fastapi import FastAPI
 
 from .config import get_settings
 from .mcp_server.server import build_mcp_app
+from .oauth.routes import router as oauth_router
 
 settings = get_settings()
 logging.basicConfig(level=settings.log_level)
@@ -48,6 +49,10 @@ async def status():
     """
     return {"status": "ok"}
 
+
+# Google's callback. Registered before the root mount, which would
+# otherwise swallow it.
+app.include_router(oauth_router)
 
 # Mounted last and at the root: the protected-resource document must live at
 # /.well-known/oauth-protected-resource/mcp, and a root mount swallows every

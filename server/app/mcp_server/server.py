@@ -12,8 +12,11 @@ container that has never seen it. The cost is no server-initiated
 notifications, which this server does not use.
 """
 
+from urllib.parse import urlparse
+
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
 from mcp.server.mcpserver import MCPServer
+from mcp.server.transport_security import TransportSecuritySettings
 
 from ..config import get_settings
 from ..oauth.provider import GoogleDriveAuthProvider
@@ -45,4 +48,14 @@ mcp = MCPServer(
 
 def build_mcp_app():
     """ASGI app for mounting. Stateless because Cloud Run has no session affinity."""
-    return mcp.streamable_http_app(stateless_http=True)
+    # The SDK's DNS-rebinding protection is on by default and allows only
+    # 127.0.0.1, so a deployed service rejects every request with 421 Invalid
+    # Host header. Derive the allowed host from the configured public origin
+    # rather than disabling the protection.
+    return mcp.streamable_http_app(
+        stateless_http=True,
+        transport_security=TransportSecuritySettings(
+            allowed_hosts=[urlparse(settings.public_base_url).netloc],
+            allowed_origins=[settings.public_base_url],
+        ),
+    )

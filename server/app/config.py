@@ -5,15 +5,17 @@ to check that no credential is hardcoded.
 """
 
 from functools import lru_cache
-from typing import Literal
 from pathlib import Path
+from typing import Literal
 
 from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=Path(__file__).parent.parent / ".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=Path(__file__).parent.parent / ".env", extra="ignore"
+    )
 
     # --- Google OAuth client ---
     google_client_id: str
@@ -70,4 +72,3 @@ def get_settings() -> Settings:
     get_settings.cache_clear().
     """
     return Settings()
-
