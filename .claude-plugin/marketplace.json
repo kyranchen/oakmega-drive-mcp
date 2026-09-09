@@ -1,0 +1,14 @@
+{
+  "name": "oakmega-drive-mcp",
+  "owner": {
+    "name": "Kyran Chen"
+  },
+  "plugins": [
+    {
+      "name": "google-drive-reader",
+      "source": "./plugin",
+      "description": "Read files from a shared Google Drive folder through natural language.",
+      "version": "0.1.0"
+    }
+  ]
+}

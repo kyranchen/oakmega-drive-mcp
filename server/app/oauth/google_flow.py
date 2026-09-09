@@ -7,6 +7,7 @@ keep those credentials fresh.
 Throughout this module "access token" means GOOGLE's. The tokens we issue
 to MCP clients are handled in provider.py and never appear here.
 """
+
 import datetime
 import logging
 from urllib.parse import urlencode
@@ -28,11 +29,13 @@ def build_google_consent_url(state: str) -> str:
         "client_id": settings.google_client_id,
         "redirect_uri": settings.google_redirect_uri,
         "response_type": "code",
-        "scope": " ".join([
-            "https://www.googleapis.com/auth/drive.readonly",
-            "openid",
-            "email",
-        ]),
+        "scope": " ".join(
+            [
+                "https://www.googleapis.com/auth/drive.readonly",
+                "openid",
+                "email",
+            ]
+        ),
         # Without access_type=offline Google issues NO refresh token, and the
         # integration silently stops working one hour after authorisation.
         "access_type": "offline",
@@ -43,6 +46,7 @@ def build_google_consent_url(state: str) -> str:
     }
 
     return f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(request_params)}"
+
 
 async def exchange_code(code: str) -> tuple[GoogleCredentials, str]:
     settings = get_settings()
@@ -80,9 +84,7 @@ async def exchange_code(code: str) -> tuple[GoogleCredentials, str]:
     if response.status_code != 200:
         error = token_data.get("error", "unknown_error")
         description = token_data.get("error_description", "")
-        logger.warning(
-            "Google rejected the code exchange: %s (%s)", error, description
-        )
+        logger.warning("Google rejected the code exchange: %s (%s)", error, description)
         raise InvalidGrant(
             f"Google rejected the authorization code ({error})."
             + (f" {description}" if description else "")
@@ -102,16 +104,14 @@ async def exchange_code(code: str) -> tuple[GoogleCredentials, str]:
         )
     except ValueError as exc:
         logger.error("id_token verification failed: %s", exc)
-        raise OAuthFlowError(
-            "Could not verify Google's identity response."
-        ) from exc
+        raise OAuthFlowError("Could not verify Google's identity response.") from exc
 
     user_id = info["sub"]
 
     creds = GoogleCredentials(
         access_token=token_data["access_token"],
         refresh_token=token_data.get("refresh_token"),
-        expires_at=datetime.datetime.now(datetime.timezone.utc)
+        expires_at=datetime.datetime.now(datetime.UTC)
         + datetime.timedelta(seconds=token_data["expires_in"]),
         scopes=token_data.get("scope", "").split(),
     )
@@ -125,9 +125,11 @@ async def exchange_code(code: str) -> tuple[GoogleCredentials, str]:
     return creds, user_id
 
 
-async def refresh_if_needed(user_id: str, creds: "GoogleCredentials") -> "GoogleCredentials":
+async def refresh_if_needed(
+    user_id: str, creds: "GoogleCredentials"
+) -> "GoogleCredentials":
     settings = get_settings()
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     if creds.expires_at - now > datetime.timedelta(seconds=60):
         return creds
 
@@ -172,7 +174,7 @@ async def refresh_if_needed(user_id: str, creds: "GoogleCredentials") -> "Google
             new_creds = GoogleCredentials(
                 access_token=token_data["access_token"],
                 refresh_token=token_data.get("refresh_token") or creds.refresh_token,
-                expires_at=datetime.datetime.now(datetime.timezone.utc)
+                expires_at=datetime.datetime.now(datetime.UTC)
                 + datetime.timedelta(seconds=token_data["expires_in"]),
                 scopes=token_data.get("scope", "").split() or creds.scopes,
             )

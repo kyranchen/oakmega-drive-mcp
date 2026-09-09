@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "google-drive": {
+      "type": "http",
+      "url": "https://oakmega-drive-mcp-1096938301196.asia-east1.run.app/mcp"
+    }
+  }
+}
