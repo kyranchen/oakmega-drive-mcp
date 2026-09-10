@@ -2,6 +2,7 @@
   "name": "google-drive-reader",
   "description": "Read files from a shared Google Drive folder through natural language. Authenticates with Google via OAuth and exposes list/read tools over a remote MCP server.",
   "version": "0.1.0",
+  "mcpServers": "./.mcp.json",
   "author": {
     "name": "Kyran Chen"
   }
