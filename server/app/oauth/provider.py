@@ -128,7 +128,21 @@ class GoogleDriveAuthProvider(OAuthAuthorizationServerProvider):
         raise NotImplementedError("Refresh token grant is not supported")
 
     async def revoke_token(self, token) -> None:
-        raise NotImplementedError
+        """Delete an issued token so the next request carrying it fails.
+
+        This is what the opaque-token choice buys. load_access_token reads the
+        store on every request, so removing the record takes effect
+        immediately — a signed token could not be withdrawn before it expired.
+
+        Only the token we issued is revoked. The user's Google authorisation is
+        untouched, so reconnecting does not require consenting again.
+
+        Per the spec, revoking an unknown or already-revoked token is a no-op
+        rather than an error.
+        """
+        token_hash = hashlib.sha256(token.token.encode()).hexdigest()
+        await self.store.delete_access_token(token_hash)
+        logger.info("Revoked an access token for subject %s", token.subject)
 
     async def exchange_identity_assertion(self, client, params):
         raise NotImplementedError("Identity assertion is not supported")

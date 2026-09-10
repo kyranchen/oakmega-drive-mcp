@@ -14,7 +14,11 @@ notifications, which this server does not use.
 
 from urllib.parse import urlparse
 
-from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
+from mcp.server.auth.settings import (
+    AuthSettings,
+    ClientRegistrationOptions,
+    RevocationOptions,
+)
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 
@@ -42,6 +46,9 @@ mcp = MCPServer(
         # Required. Claude Code's redirect URI is a localhost callback on a
         # port not known until runtime, so it cannot be pre-registered.
         client_registration_options=ClientRegistrationOptions(enabled=True),
+        # RFC 7009. Mounts /revoke, which is the entry point that makes the
+        # opaque-token choice worth its per-request lookup.
+        revocation_options=RevocationOptions(enabled=True),
     ),
 )
 
@@ -64,4 +71,4 @@ def build_mcp_app():
 # Imported for its side effect: the @mcp.tool() decorators in that module only
 # run when it is imported, and nothing else imports it. Without this the server
 # starts cleanly, authenticates correctly, and exposes no tools at all.
-from . import tools  # noqa: E402, F401  (import at end: tools imports `mcp` from here)
+from . import tools  # noqa: F401  (import at end: tools imports `mcp` from here)

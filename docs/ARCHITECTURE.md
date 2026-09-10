@@ -8,14 +8,13 @@
 
 - [整體形狀](#整體形狀)
 - [1. 為什麼是 Cloud Run](#1-為什麼是-cloud-run)
-- [2. 為什麼是兩段 OAuth 交握](#2-為什麼是兩段-oauth-交握)
+- [2. 為什麼是兩段 OAuth Handshake](#2-為什麼是兩段-oauth-handshake)
 - [3. 為什麼實作 SDK 的 provider 介面](#3-為什麼實作-sdk-的-provider-介面)
-- [4. 為什麼需要動態註冊](#4-為什麼需要動態註冊)
-- [5. 為什麼是 opaque token 而非 JWT](#5-為什麼是-opaque-token-而非-jwt)
-- [6. 為什麼是 Firestore](#6-為什麼是-firestore)
-- [7. 為什麼是 stateless 傳輸](#7-為什麼是-stateless-傳輸)
-- [8. 圖片為什麼不做辨識](#8-圖片為什麼不做辨識)
-- [9. PDF 的處理界線](#9-pdf-的處理界線)
+- [4. 為什麼是 opaque token 而非 JWT](#4-為什麼是-opaque-token-而非-jwt)
+- [5. 為什麼是 Firestore](#5-為什麼是-firestore)
+- [6. 為什麼是 stateless 傳輸](#6-為什麼是-stateless-傳輸)
+- [7. 圖片為什麼不做辨識](#7-圖片為什麼不做辨識)
+- [8. PDF 的處理界線](#8-pdf-的處理界線)
 - [關於存取範圍](#關於存取範圍)
 - [已知限制](#已知限制)
 
@@ -42,6 +41,10 @@ Claude Code  ←──①──→  本服務（Cloud Run）  ←──②──
 
 3. POST /register，帶自己的 localhost callback
    → 取得 client_id                            [provider.register_client]
+   ↑ 動態註冊是必要的，不是選項：Claude Code 的 callback 是
+     http://localhost:<隨機埠>/callback，埠號執行前不可知，無法預先註冊。
+     開放註冊是安全的 —— 註冊本身不授予任何存取權，真正的關卡是
+     Google 的同意畫面，需要真人操作。
 
 4. 瀏覽器開啟 /authorize
    → 暫存請求，回傳 Google 同意畫面網址        [provider.authorize]
@@ -81,7 +84,7 @@ OakMega 的技術棧是 Python/Flask,用 Python 實作對團隊接手比較自�
 
 ---
 
-## 2. 為什麼是兩段 OAuth 交握
+## 2. 為什麼是兩段 OAuth Handshake
 
 最直覺的做法是讓 Claude Code 直接與 Google 完成授權,本服務只轉發請求。
 **這樣 Google 的 refresh token 會落在 client 端。**
@@ -136,37 +139,49 @@ SDK 的 PKCE 實作也處理了容易忽略的細節,例如 base64url 編碼**�
 
 ---
 
-## 4. 為什麼需要動態註冊
+## 4. 為什麼是 opaque token 而非 JWT
 
-Claude Code 的 OAuth callback 是 `http://localhost:<隨機埠>/callback`,
-埠號在執行前不可知,**因此無法預先註冊**。
+JWT 的主要優勢是**免查表**:token 自帶簽章,驗證時不需要碰資料庫。
+**但在這個架構下那個優勢不存在。**
 
-RFC 7591 的動態註冊是唯一可行方式。本服務接受任何註冊請求 ——
-這是安全的,因為註冊本身不授予任何資料存取權:真正的關卡是 Google 的
-同意畫面,需要真人操作。
+一次 tool 呼叫的實際路徑:
 
-SDK 預設會為註冊的 client 簽發 `client_secret`。存放在使用者機器上的
-「secret」並非真正的機密(這正是 PKCE 存在的理由),但保留這一層沒有壞處。
+```
+store.get_access_token(hash)     → 取得 subject        ← JWT 能省掉這次
+store.get_credentials(subject)   → 取得 Google 憑證     ← 省不掉
+```
 
----
+第二次查表是必然的 —— 不論 token 是什麼形式,都必須從儲存層取出該使用者的
+Google 憑證才能呼叫 Drive API。而那份憑證不可能放進 JWT(放了就等於把
+Google token 交給 client,回到[第 2 節](#2-為什麼是兩段-oauth-handshake)否決的設計)。
 
-## 5. 為什麼是 opaque token 而非 JWT
+因此實際的取捨是:
 
-| | JWT | Opaque token（本專案） |
+| | Opaque（採用） | JWT |
 |---|---|---|
-| 驗證 | 自我驗證,免查表 | 每次請求查一次資料庫 |
-| 撤銷 | **無法**在到期前失效 | 刪除記錄即刻生效 |
+| 每次請求的資料庫讀取 | 2 次 | 1 次 |
+| 可撤銷 | ✅ 刪除記錄即刻生效 | ❌ 到期前無法失效 |
+| 簽章金鑰輪替 | 不需要 | 需要 |
 
-由於服務本來就需要一個儲存層來保管 Google 憑證,查表的成本已經付出,
-因此選擇 opaque token 換取可撤銷性。
+用「無法撤銷」換取一次 Firestore 讀取,在這個架構下不划算。
 
-**簽發的 token 只儲存 SHA-256 雜湊值。** 原始值僅在簽發當下回傳給 client,
-不落地。資料庫被讀取(外洩、備份、Console、錯誤追蹤服務)不會直接得到
-可用的憑證 —— 與密碼儲存同樣的理由。
+若是驗證完即可服務、不需再查任何資料的 API,JWT 省下的是**唯一**一次查表,
+結論會相反。
 
----
+### 撤銷如何生效
 
-## 6. 為什麼是 Firestore
+`load_access_token` 每次請求都讀取儲存層,因此刪除記錄的下一個請求就會失敗。
+`/revoke` 端點(RFC 7009)已實作並掛載。
+
+撤銷只影響本服務簽發的 token —— 使用者的 Google 授權不受影響,
+重新連線不需要再次同意。
+
+### 簽發的 token 只存雜湊
+
+原始值僅在簽發當下回傳給 client,不落地。資料庫被讀取(外洩、備份、
+Console、錯誤追蹤服務)不會直接得到可用的憑證 —— 與密碼儲存同樣的理由。
+
+## 5. 為什麼是 Firestore
 
 **這不是可選的加分項,而是平台特性造成的必要條件。**
 
@@ -211,7 +226,7 @@ Firestore 權限問題。
 
 ---
 
-## 7. 為什麼是 stateless 傳輸
+## 6. 為什麼是 stateless 傳輸
 
 MCP 的 Streamable HTTP 預設為 stateful,在記憶體中保存 session 狀態並以
 `Mcp-Session-Id` 關聯。在 Cloud Run 的多實例環境下,client 的下一個請求
@@ -225,7 +240,7 @@ MCP 的 Streamable HTTP 預設為 stateful,在記憶體中保存 session 狀態�
 
 ---
 
-## 8. 圖片為什麼不做辨識
+## 7. 圖片為什麼不做辨識
 
 作業說明「即使只是回報無法解析也算合理處理」。本專案的做法是**下載原始
 位元組,以 base64 包成 MCP image content block 回傳**,由 Claude 自身的
@@ -245,7 +260,7 @@ Base64 編碼刻意放在 MCP 邊界(`tools.py`)而非抽取層,讓 extractor �
 
 ---
 
-## 9. PDF 的處理界線
+## 8. PDF 的處理界線
 
 使用 `pypdf` 抽取文字,並以頁碼標記分隔,讓引用時能指出位置。
 
@@ -308,5 +323,4 @@ commit 歷史中。
 **若有更多時間**
 
 - 補上自動化測試(目前的驗證以手動端到端為主)
-- 實作 token 撤銷端點
 - 快取資料夾列表以減少 Drive API 呼叫
