@@ -59,3 +59,9 @@ def build_mcp_app():
             allowed_origins=[settings.public_base_url],
         ),
     )
+
+
+# Imported for its side effect: the @mcp.tool() decorators in that module only
+# run when it is imported, and nothing else imports it. Without this the server
+# starts cleanly, authenticates correctly, and exposes no tools at all.
+from . import tools  # noqa: E402, F401  (import at end: tools imports `mcp` from here)
