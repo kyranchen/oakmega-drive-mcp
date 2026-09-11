@@ -49,17 +49,20 @@ claude
 /plugin install google-drive-reader@oakmega-drive-mcp
 ```
 
+```
+Install for users
+```
+
 ### 4. 授權 Google 帳號
 
 ```
 /mcp
 ```
 
-在清單中選擇 **google-drive**，點選 **Authorize**。瀏覽器會開啟 Google 登入頁面：
+在清單中選擇 **google-drive**，點選 **Authenticate**。瀏覽器會開啟 Google 登入頁面：
 
 1. 選擇你的 Google 帳號
-2. 出現「Google hasn't verified this app」時，點 **Advanced** →
-   **Go to oakmega-drive-mcp (unsafe)**
+2. 出現「Google hasn't verified this app」時，點 **繼續** →
    （這是 Testing 模式的正常行為，原因見[疑難排解](#google-說這個應用程式未經驗證)）
 3. 同意「查看你的 Google 雲端硬碟檔案」
 4. 瀏覽器顯示授權完成後即可關閉
