@@ -7,7 +7,12 @@ plain dataclasses.
 from collections import deque
 from dataclasses import dataclass, field
 
-from ..errors import DriveAPIError, FileNotFound, FileOutsideAllowedFolder
+from ..errors import (
+    DriveAPIError,
+    FileNotFound,
+    FileOutsideAllowedFolder,
+    FolderNotAccessible,
+)
 from .client import call
 
 FOLDER_MIME = "application/vnd.google-apps.folder"
@@ -92,7 +97,24 @@ async def list_folder_tree(service, folder_id: str) -> list[DriveFile]:
     while queue:
         current_id, prefix = queue.popleft()
 
-        for raw in await _list_children(service, current_id):
+        try:
+            children = await _list_children(service, current_id)
+        except DriveAPIError as exc:
+            # A 404 on the root is the common way to authorise with the wrong
+            # Google account: the folder exists, this account just cannot see
+            # it. Saying so beats forwarding Drive's own wording, which names
+            # an opaque id and never mentions accounts.
+            if current_id == folder_id and (
+                "404" in str(exc) or "notFound" in str(exc)
+            ):
+                raise FolderNotAccessible(
+                    "This Google account cannot see the configured Drive folder. "
+                    "Check that you authorised with an account the folder is "
+                    "shared with."
+                ) from exc
+            raise
+
+        for raw in children:
             name = raw.get("name", "(untitled)")
             path = f"{prefix}/{name}" if prefix else name
 

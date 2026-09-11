@@ -170,3 +170,38 @@ class TestFolderBoundary:
 
     async def test_the_folder_itself_is_allowed(self):
         await assert_within_folder(FakeDrive({}), "root", "root")
+
+
+class TestFolderAccess:
+    """Authorising with the wrong Google account is easy and its Drive-level
+    symptom is a 404 naming an opaque id. The message has to name the cause."""
+
+    async def test_an_inaccessible_root_names_the_account(self):
+        from app.errors import FolderNotAccessible
+
+        class NoAccess(FakeDrive):
+            def list(self, **kw):
+                raise RuntimeError('<HttpError 404 ... "notFound">')
+
+        with pytest.raises(FolderNotAccessible) as exc:
+            await list_folder_tree(NoAccess({}), "root")
+
+        message = str(exc.value).lower()
+        assert "account" in message
+        assert "authorised" in message or "authorized" in message
+
+    async def test_a_missing_subfolder_does_not_claim_an_account_problem(self):
+        """Only the root gets the account-specific message. A subfolder that
+        vanishes mid-walk is a different failure."""
+        from app.errors import DriveAPIError
+
+        class FailsOnSubfolder(FakeDrive):
+            def list(self, *, q, **kw):
+                if "'sub'" in q:
+                    raise RuntimeError('<HttpError 404 ... "notFound">')
+                return super().list(q=q, **kw)
+
+        service = FailsOnSubfolder({"root": [_folder("sub", "Gone")]})
+
+        with pytest.raises(DriveAPIError):
+            await list_folder_tree(service, "root")

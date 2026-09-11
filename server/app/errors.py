@@ -28,6 +28,15 @@ class FileNotFound(DriveMCPError):
     """Drive returned 404, or the id does not resolve."""
 
 
+class FolderNotAccessible(DriveMCPError):
+    """The configured folder is not visible to the authenticated account.
+
+    Almost always means the user authorised with a different Google account
+    than the one the folder is shared with — a mistake that is easy to make and
+    impossible to diagnose from Drive's own 404.
+    """
+
+
 class FileOutsideAllowedFolder(DriveMCPError):
     """The requested file exists but is not a descendant of DRIVE_FOLDER_ID.
 

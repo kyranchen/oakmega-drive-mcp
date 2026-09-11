@@ -148,9 +148,15 @@ Claude Code  ←──①──→  本服務（授權伺服器）  ←──②
 
 該 Google 帳號不在測試使用者名單內。請告知我要加入的帳號。
 
-### 列出來是空的
+### 提示「這個 Google 帳號看不到設定的資料夾」
 
-確認授權時使用的 Google 帳號**確實有測試資料夾的存取權**。
+授權時選到了沒有該資料夾存取權的 Google 帳號。在 `/mcp` 中重新授權，
+選擇資料夾分享對象的那個帳號。
+
+### Windows 終端機顯示中文為亂碼
+
+終端機編碼設定，與 plugin 無關。執行 `chcp 65001` 切換為 UTF-8，
+並建議使用 Windows Terminal 搭配含中文字形的字型（例如 Microsoft JhengHei Mono）。
 
 ### PDF 回報「no text layer」
 
