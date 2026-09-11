@@ -20,8 +20,12 @@ from ..config import get_settings
 from ..drive.client import get_drive_service
 from ..drive.content import read_file_content
 from ..drive.extractors import ExtractedImage
-from ..drive.listing import get_file_metadata, list_folder_tree
-from ..errors import DriveMCPError, NotAuthorized
+from ..drive.listing import (
+    assert_within_folder,
+    get_file_metadata,
+    list_folder_tree,
+)
+from ..errors import DriveMCPError, FileOutsideAllowedFolder, NotAuthorized
 from .server import mcp
 
 logger = logging.getLogger(__name__)
@@ -63,6 +67,8 @@ def _describe(error: DriveMCPError) -> str:
     """
     if isinstance(error, NotAuthorized):
         return f"{error} {_REAUTH_HINT}"
+    if isinstance(error, FileOutsideAllowedFolder):
+        return f"{error} Use list_files to see what this server is allowed to read."
     return str(error)
 
 
@@ -109,9 +115,11 @@ async def read_file(file_id: str) -> list[TextContent | ImageContent]:
         file_id: The Drive file ID, as shown by list_files.
     """
     subject = _current_subject()
+    folder_id = get_settings().drive_folder_id
 
     try:
         service = await get_drive_service(subject)
+        await assert_within_folder(service, file_id, folder_id)
         metadata = await get_file_metadata(service, file_id)
         result = await read_file_content(service, metadata)
     except DriveMCPError as exc:

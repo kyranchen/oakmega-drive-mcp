@@ -7,7 +7,7 @@ plain dataclasses.
 from collections import deque
 from dataclasses import dataclass, field
 
-from ..errors import DriveAPIError, FileNotFound
+from ..errors import DriveAPIError, FileNotFound, FileOutsideAllowedFolder
 from .client import call
 
 FOLDER_MIME = "application/vnd.google-apps.folder"
@@ -19,6 +19,10 @@ _LIST_FIELDS = (
 )
 
 _SHARED_DRIVE_ARGS = {"supportsAllDrives": True, "includeItemsFromAllDrives": True}
+
+_GET_FIELDS = "id, name, mimeType, parents"
+
+MAX_PARENT_DEPTH = 25
 
 
 @dataclass
@@ -120,3 +124,39 @@ async def get_file_metadata(service, file_id: str) -> DriveFile:
         raise DriveAPIError(f"Could not read metadata for {file_id}: {exc}") from exc
 
     return _to_drive_file(raw, path=raw.get("name", ""))
+
+
+async def assert_within_folder(service, file_id: str, root_folder_id: str) -> None:
+    if file_id == root_folder_id:
+        return
+
+    seen: set[str] = set()
+    frontier = deque([(file_id, 0)])
+
+    while frontier:
+        current_id, depth = frontier.popleft()
+        if current_id in seen or depth > MAX_PARENT_DEPTH:
+            continue
+        seen.add(current_id)
+
+        try:
+            raw = await call(
+                service.files().get(
+                    fileId=current_id,
+                    fields=_GET_FIELDS,
+                    supportsAllDrives=True,
+                )
+            )
+        except Exception as exc:
+            if "404" in str(exc) or "notFound" in str(exc):
+                raise FileNotFound(f"No file with id {file_id}.") from exc
+            raise DriveAPIError(f"Could not verify {file_id}: {exc}") from exc
+
+        for parent_id in raw.get("parents", []) or []:
+            if parent_id == root_folder_id:
+                return
+            frontier.append((parent_id, depth + 1))
+
+    raise FileOutsideAllowedFolder(
+        f"File {file_id} is not inside the shared folder this server is allowed to read."
+    )
