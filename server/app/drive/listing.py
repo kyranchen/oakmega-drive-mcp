@@ -88,8 +88,39 @@ async def _list_children(service, parent_id: str) -> list[dict]:
             return children
 
 
+async def _assert_folder_visible(service, folder_id: str) -> None:
+    """Fail early, and specifically, when the account cannot see the folder.
+
+    files().list() is not enough to detect this. Querying children of a folder
+    that exists but is not shared with the caller returns an EMPTY LIST, not an
+    error — so the walk finishes cleanly and the user is told the folder is
+    empty, when the truth is that they authorised with the wrong Google
+    account. files().get() on the folder itself returns 404 in that case, which
+    is the signal worth acting on.
+
+    (Google answers 404 rather than 403 deliberately: a 403 would confirm the
+    folder exists, which leaks information to someone guessing ids.)
+    """
+    try:
+        await call(
+            service.files().get(
+                fileId=folder_id, fields="id, name", supportsAllDrives=True
+            )
+        )
+    except Exception as exc:
+        if "404" in str(exc) or "notFound" in str(exc):
+            raise FolderNotAccessible(
+                "This Google account cannot see the configured Drive folder. "
+                "Check that you authorised with an account the folder is "
+                "shared with."
+            ) from exc
+        raise DriveAPIError(f"Could not open folder {folder_id}: {exc}") from exc
+
+
 async def list_folder_tree(service, folder_id: str) -> list[DriveFile]:
     # Breadth-first traversal of a folder tree, returning all files and folders
+    await _assert_folder_visible(service, folder_id)
+
     files: list[DriveFile] = []
     visited: set[str] = {folder_id}
     queue: deque[tuple[str, str]] = deque([(folder_id, "")])

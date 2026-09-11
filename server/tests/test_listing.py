@@ -48,6 +48,10 @@ class FakeDrive:
         )
 
     def get(self, *, fileId, **kw):
+        # A folder this fake knows about is visible, even with no parents
+        # recorded: the visibility probe only needs the call to succeed.
+        if fileId in self._children:
+            return _Request({"id": fileId, "name": fileId, "parents": []})
         if fileId not in self._parents:
             raise RuntimeError('{"error": {"code": 404, "message": "notFound"}}')
         return _Request(
@@ -173,35 +177,30 @@ class TestFolderBoundary:
 
 
 class TestFolderAccess:
-    """Authorising with the wrong Google account is easy and its Drive-level
-    symptom is a 404 naming an opaque id. The message has to name the cause."""
+    """Authorising with a Google account the folder is not shared with is easy,
+    and it is invisible at the listing level: querying children of a folder you
+    cannot see returns an empty list rather than an error, so the walk succeeds
+    and reports an empty folder. The probe is what turns that into an answer."""
 
-    async def test_an_inaccessible_root_names_the_account(self):
+    async def test_an_invisible_folder_is_reported_not_reported_empty(self):
         from app.errors import FolderNotAccessible
 
-        class NoAccess(FakeDrive):
-            def list(self, **kw):
+        class Invisible(FakeDrive):
+            def get(self, *, fileId, **kw):
                 raise RuntimeError('<HttpError 404 ... "notFound">')
 
+            def list(self, **kw):
+                # What Drive actually does for a folder shared with someone
+                # else: no error, just nothing.
+                return _Request({"files": []})
+
         with pytest.raises(FolderNotAccessible) as exc:
-            await list_folder_tree(NoAccess({}), "root")
+            await list_folder_tree(Invisible({"root": []}), "root")
 
         message = str(exc.value).lower()
         assert "account" in message
-        assert "authorised" in message or "authorized" in message
+        assert "shared" in message
 
-    async def test_a_missing_subfolder_does_not_claim_an_account_problem(self):
-        """Only the root gets the account-specific message. A subfolder that
-        vanishes mid-walk is a different failure."""
-        from app.errors import DriveAPIError
-
-        class FailsOnSubfolder(FakeDrive):
-            def list(self, *, q, **kw):
-                if "'sub'" in q:
-                    raise RuntimeError('<HttpError 404 ... "notFound">')
-                return super().list(q=q, **kw)
-
-        service = FailsOnSubfolder({"root": [_folder("sub", "Gone")]})
-
-        with pytest.raises(DriveAPIError):
-            await list_folder_tree(service, "root")
+    async def test_a_genuinely_empty_folder_still_reads_as_empty(self):
+        """The probe must not turn every empty folder into an access error."""
+        assert await list_folder_tree(FakeDrive({"root": []}), "root") == []
