@@ -23,8 +23,14 @@ _IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
 
 _TEXT_TYPES = {"application/json", "application/xml", "application/x-yaml"}
 
+# Images are bounded by Claude's API, which accepts roughly 5MB of *base64*.
+# Base64 inflates by 4/3, so the raw file must stay under about 3.9MB; 3.5MB
+# leaves room for the surrounding JSON. A larger file would pass a naive check
+# here and then be refused downstream — a worse failure than declining it up
+# front with a number the user can act on.
+MAX_IMAGE_BYTES = int(3.5 * 1024 * 1024)
+
 MAX_TEXT_BYTES = 5 * 1024 * 1024
-MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 
 def _is_text(mime_type: str) -> bool:
