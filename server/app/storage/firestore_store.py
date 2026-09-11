@@ -34,9 +34,7 @@ from google.cloud.firestore import AsyncClient
 from mcp.server.auth.provider import AccessToken, AuthorizationCode
 from mcp.shared.auth import OAuthClientInformationFull
 
-from .base import GoogleCredentials, PendingAuthorization
-
-PENDING_TTL_SECONDS = 600
+from .base import PENDING_TTL_SECONDS, GoogleCredentials, PendingAuthorization
 
 
 class FirestoreTokenStore:

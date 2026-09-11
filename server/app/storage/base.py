@@ -27,6 +27,15 @@ from mcp.shared.auth import OAuthClientInformationFull
 
 from ..config import get_settings
 
+# How long an /authorize request stays resumable. Long enough for someone to
+# read a consent screen, short enough that a leaked state is not useful later.
+# Defined here because both backends enforce it and routes.py stamps it.
+PENDING_TTL_SECONDS = 600
+
+# An authorization code is redeemed within seconds in practice. Ten minutes is
+# the ceiling RFC 6749 §4.1.2 recommends.
+AUTH_CODE_TTL_SECONDS = 600
+
 
 @dataclass
 class GoogleCredentials:

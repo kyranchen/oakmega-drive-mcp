@@ -17,7 +17,7 @@ import time
 from mcp.server.auth.provider import AccessToken, AuthorizationCode
 from mcp.shared.auth import OAuthClientInformationFull
 
-from .base import GoogleCredentials, PendingAuthorization
+from .base import PENDING_TTL_SECONDS, GoogleCredentials, PendingAuthorization
 
 
 class MemoryTokenStore:
@@ -52,11 +52,11 @@ class MemoryTokenStore:
             if record is None:
                 return None
             if record.created_at + datetime.timedelta(
-                minutes=10
+                seconds=PENDING_TTL_SECONDS
             ) < datetime.datetime.now(tz=datetime.UTC):
                 return None
             return record
-        
+
     async def get_code(self, code: str) -> AuthorizationCode | None:
         return self._codes.get(code)
 

@@ -40,6 +40,17 @@ from .google_flow import build_google_consent_url
 
 logger = logging.getLogger(__name__)
 
+# One value, used both to stamp the stored record and to tell the client how
+# long it has. Two separate literals drifted apart once already: the server
+# expired tokens after an hour while clients were told they had a day, so a
+# session died mid-use with no warning.
+#
+# A day rather than an hour because the refresh_token grant is deliberately not
+# supported — expiry here means a full re-consent, not a quiet renewal. The
+# credential lifetime that actually matters is Google's refresh token, which
+# this server holds and rotates on its own.
+ACCESS_TOKEN_TTL_SECONDS = 24 * 3600
+
 
 class GoogleDriveAuthProvider(OAuthAuthorizationServerProvider):
     """Bridges the two OAuth handshakes.
@@ -99,13 +110,15 @@ class GoogleDriveAuthProvider(OAuthAuthorizationServerProvider):
             scopes=record.scopes,
             resource=record.resource,
             subject=record.subject,
-            expires_at=int(time.time()) + 3600,
+            expires_at=int(time.time()) + ACCESS_TOKEN_TTL_SECONDS,
         )
 
         await self.store.put_access_token(token_hash, token_object)
 
         return OAuthToken(
-            access_token=raw_token, token_type="Bearer", expires_in=24 * 3600
+            access_token=raw_token,
+            token_type="Bearer",
+            expires_in=ACCESS_TOKEN_TTL_SECONDS,
         )
 
     async def load_access_token(self, token):

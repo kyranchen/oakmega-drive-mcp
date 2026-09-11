@@ -33,6 +33,7 @@ from ..storage.base import get_token_store
 
 TOKEN_URI = "https://oauth2.googleapis.com/token"
 
+
 async def get_drive_service(subject: str):
     store = get_token_store()
     settings = get_settings()
@@ -49,7 +50,7 @@ async def get_drive_service(subject: str):
         token_uri=TOKEN_URI,
         client_id=settings.google_client_id,
         client_secret=settings.google_client_secret.get_secret_value(),
-        scopes=creds.scopes
+        scopes=creds.scopes,
     )
 
     return await asyncio.to_thread(

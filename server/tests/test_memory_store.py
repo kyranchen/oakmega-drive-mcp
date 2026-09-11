@@ -211,3 +211,69 @@ class TestRevocation:
         await provider.revoke_token(
             AccessToken(token="never-issued", client_id="c1", scopes=[])
         )
+
+
+class TestTokenLifetime:
+    """The stored expiry and the advertised expiry have to be the same number.
+
+    They drifted apart once: records expired after an hour while clients were
+    told they had a day, so a session died mid-use and the only recovery was a
+    full re-consent. Both now read one constant, and this test fails if anyone
+    reintroduces a second literal.
+    """
+
+    async def test_stored_expiry_matches_what_the_client_is_told(self, store):
+        import time
+
+        from app.config import get_settings
+        from app.oauth.provider import ACCESS_TOKEN_TTL_SECONDS, GoogleDriveAuthProvider
+
+        provider = GoogleDriveAuthProvider(store, get_settings())
+        await store.put_code(_code("ttl-check"))
+        record = await store.get_code("ttl-check")
+
+        before = time.time()
+        issued = await provider.exchange_authorization_code(None, record)
+
+        stored = await store.get_access_token(
+            __import__("hashlib").sha256(issued.access_token.encode()).hexdigest()
+        )
+
+        advertised_expiry = before + issued.expires_in
+        assert abs(stored.expires_at - advertised_expiry) < 5, (
+            f"server expires the token at {stored.expires_at} but tells the client "
+            f"it lasts until {advertised_expiry}"
+        )
+        assert issued.expires_in == ACCESS_TOKEN_TTL_SECONDS
+
+
+class TestTtlConsistency:
+    """Both backends must enforce the same window.
+
+    The pending TTL used to be written twice — `minutes=10` in the in-memory
+    store and `600` in the Firestore one — so changing one silently left the
+    other behind, and the test suite only ever exercised the first.
+    """
+
+    async def test_pending_expiry_uses_the_shared_constant(self, store):
+        from app.storage.base import PENDING_TTL_SECONDS
+
+        just_inside = PENDING_TTL_SECONDS / 60 - 1
+        just_outside = PENDING_TTL_SECONDS / 60 + 1
+
+        await store.put_pending("inside", _pending(age_minutes=just_inside))
+        await store.put_pending("outside", _pending(age_minutes=just_outside))
+
+        assert await store.pop_pending("inside") is not None
+        assert await store.pop_pending("outside") is None
+
+    def test_both_backends_read_the_same_constant(self):
+        """A structural check: neither backend may hold its own literal."""
+        import inspect
+
+        from app.storage import firestore_store, memory_store
+
+        for module in (memory_store, firestore_store):
+            source = inspect.getsource(module)
+            assert "PENDING_TTL_SECONDS" in source, f"{module.__name__} must import it"
+            assert "minutes=10" not in source, f"{module.__name__} has its own literal"

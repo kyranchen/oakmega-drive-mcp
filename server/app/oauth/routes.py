@@ -18,7 +18,11 @@ from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse, RedirectResponse
 from mcp.server.auth.provider import AuthorizationCode
 
-from ..storage.base import PendingAuthorization, get_token_store
+from ..storage.base import (
+    AUTH_CODE_TTL_SECONDS,
+    PendingAuthorization,
+    get_token_store,
+)
 from .google_flow import exchange_code
 
 router = APIRouter()
@@ -60,7 +64,7 @@ async def google_callback(
             resource=pending.resource,
             code=our_code,
             scopes=pending.scopes,
-            expires_at=time.time() + 600,
+            expires_at=time.time() + AUTH_CODE_TTL_SECONDS,
         )
     )
 
